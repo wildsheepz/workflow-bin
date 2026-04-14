@@ -24,14 +24,13 @@ jobs:
       fail-fast: false
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           ref: ${{ matrix.run.branch }}
 
       - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          cache: false
+        uses: actions/setup-go@v5
+        # with:
         #   go-version: '1.21'
 
       - name: Setup Cosign
@@ -65,48 +64,9 @@ jobs:
           NEW_VERSION=$(jq -r '.tagName' < setup-${{ matrix.run.branch }}/${{ matrix.run.branch }}-HEAD.json)
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          if (git diff --staged --name-only --quiet | grep "$NEW_VERSION.json"); then
+          if ! git diff --staged --name-only --quiet | grep "$NEW_VERSION.json"; then
             git commit -m "ci: update ${{ matrix.run.branch }} $NEW_VERSION"
             git push
           else
             echo "No changes to commit."
-          fi
-
-      - name: Prepare Summary
-        run: |
-          NEW_VERSION=$(jq -r '.tagName' < setup-${{ matrix.run.branch }}/${{ matrix.run.branch }}-HEAD.json)
-          PUBLISHED_AT=$(jq -r '.publishedAt' < setup-${{ matrix.run.branch }}/${{ matrix.run.branch }}-HEAD.json)
-          COMMIT_SHA=$(jq -r '.tag_commit_sha' < setup-${{ matrix.run.branch }}/${{ matrix.run.branch }}-HEAD.json)
-          URL=$(jq -r '.url' < setup-${{ matrix.run.branch }}/${{ matrix.run.branch }}-HEAD.json)
-          echo "| ${{ matrix.run.branch }} | \`$NEW_VERSION\` | $PUBLISHED_AT | \`$COMMIT_SHA\` | \`$URL\` |" > summary-${{ matrix.run.branch }}.txt
-
-      - name: Upload Summary
-        uses: actions/upload-artifact@v7
-        with:
-          name: summary-${{ matrix.run.branch }}
-          path: summary-${{ matrix.run.branch }}.txt
-          retention-days: 1
-
-  generate-summary:
-    needs: update-binaries
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download Summaries
-        uses: actions/download-artifact@v8
-        with:
-          path: summaries
-          pattern: summary-*
-          merge-multiple: true
-
-      - name: Create Markdown Summary
-        run: |
-          echo "## Binaries Update Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Binary | Version | Published Date | Commit Hash | Url |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|---------|----------------|-------------|-------------|" >> $GITHUB_STEP_SUMMARY
-          if ls summaries/summary-*.txt 1> /dev/null 2>&1; then
-            cat summaries/summary-*.txt >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| No summaries generated | | | |" >> $GITHUB_STEP_SUMMARY
           fi
