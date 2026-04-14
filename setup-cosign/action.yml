@@ -1,0 +1,26 @@
+name: 'Setup Cosign'
+description: 'Downloads the vendored Cosign binary from LFS and adds it to the GITHUB_PATH'
+
+inputs:
+  github_token:
+    description: 'GitHub token to authenticate checking out the LFS binary'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Add Cosign to PATH
+      shell: bash
+      run: |
+        (cd ${{ github.action_path }} && ./run.sh extract)
+        echo "${{ github.action_path }}/linux/amd64/bin" >> $GITHUB_PATH
+        chmod +x ${{ github.action_path }}/linux/amd64/bin/cosign
+        (set +e +o pipefail; ${{ github.action_path }}/linux/amd64/bin/cosign version || true)
+
+    - name: debug
+      shell: bash
+      if: failure()
+      continue-on-error: true
+      run: |-
+        sudo apt install -y tree
+        (set -x; echo ${{ github.action_path }}; tree ${{ github.action_path }})

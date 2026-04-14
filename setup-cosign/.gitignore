@@ -1,0 +1,6 @@
+cosign-linux-amd64
+artifact.pub
+*.decoded
+sigstore-root.json
+linux
+tuf.db
