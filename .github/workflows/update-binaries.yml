@@ -1,0 +1,112 @@
+name: Update Binaries
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  update-binaries:
+    runs-on: ubuntu-latest
+    strategy: 
+      # max-parallel: ${{inputs.max-parallel}}
+      matrix:
+        run: 
+          - { "branch": "betterleaks" }
+          - { "branch": "cosign" }
+          - { "branch": "grype" }
+          - { "branch": "helm" }
+          - { "branch": "helmfile" }
+          - { "branch": "osv-scanner" }
+          - { "branch": "poutine" }
+          - { "branch": "slsa-verifier" }
+          - { "branch": "yq" }
+      fail-fast: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ matrix.run.branch }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          cache: false
+        #   go-version: '1.21'
+
+      - name: Setup Cosign
+        uses: wildsheepz/workflow-bin/setup-cosign@cosign
+
+      - name: Setup SLSA Verifier
+        uses: wildsheepz/workflow-bin/setup-slsa-verifier@slsa-verifier
+
+      - name: Download
+        env:
+          GH_TOKEN: ${{github.token}}
+        run: |-
+          setup-${{ matrix.run.branch }}/run.sh download
+
+      - name: Verify
+        run: |-
+          setup-${{ matrix.run.branch }}/run.sh verify
+
+      - name: Store
+        run: |-
+          setup-${{ matrix.run.branch }}/run.sh store
+
+      - name: Git Actions
+        run: |-
+          git add setup-${{ matrix.run.branch }}
+          git reset setup-${{ matrix.run.branch }}/run.sh
+          git status
+
+      - name: Commit and Push Changes
+        run: |
+          NEW_VERSION=$(jq -r '.tagName' < setup-${{ matrix.run.branch }}/${{ matrix.run.branch }}-HEAD.json)
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          if (git diff --staged --name-only --quiet | grep "$NEW_VERSION.json"); then
+            git commit -m "ci: update ${{ matrix.run.branch }} $NEW_VERSION"
+            git push
+          else
+            echo "No changes to commit."
+          fi
+
+      - name: Prepare Summary
+        run: |
+          NEW_VERSION=$(jq -r '.tagName' < setup-${{ matrix.run.branch }}/${{ matrix.run.branch }}-HEAD.json)
+          PUBLISHED_AT=$(jq -r '.publishedAt' < setup-${{ matrix.run.branch }}/${{ matrix.run.branch }}-HEAD.json)
+          COMMIT_SHA=$(jq -r '.tag_commit_sha' < setup-${{ matrix.run.branch }}/${{ matrix.run.branch }}-HEAD.json)
+          URL=$(jq -r '.url' < setup-${{ matrix.run.branch }}/${{ matrix.run.branch }}-HEAD.json)
+          echo "| ${{ matrix.run.branch }} | \`$NEW_VERSION\` | $PUBLISHED_AT | \`$COMMIT_SHA\` | \`$URL\` |" > summary-${{ matrix.run.branch }}.txt
+
+      - name: Upload Summary
+        uses: actions/upload-artifact@v7
+        with:
+          name: summary-${{ matrix.run.branch }}
+          path: summary-${{ matrix.run.branch }}.txt
+          retention-days: 1
+
+  generate-summary:
+    needs: update-binaries
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Summaries
+        uses: actions/download-artifact@v8
+        with:
+          path: summaries
+          pattern: summary-*
+          merge-multiple: true
+
+      - name: Create Markdown Summary
+        run: |
+          echo "## Binaries Update Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Binary | Version | Published Date | Commit Hash | Url |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|---------|----------------|-------------|-------------|" >> $GITHUB_STEP_SUMMARY
+          if ls summaries/summary-*.txt 1> /dev/null 2>&1; then
+            cat summaries/summary-*.txt >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| No summaries generated | | | |" >> $GITHUB_STEP_SUMMARY
+          fi
