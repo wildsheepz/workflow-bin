@@ -1,0 +1,21 @@
+name: 'Setup Grype'
+description: 'Downloads Grype binary and adds it to the GITHUB_PATH'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Add Grype to PATH
+      shell: bash
+      run: |
+        (cd ${{ github.action_path }} && ./run.sh extract)
+        echo "${{ github.action_path }}/linux/amd64/bin" >> $GITHUB_PATH
+        chmod +x ${{ github.action_path }}/linux/amd64/bin/grype
+        (set +e +o pipefail; ${{ github.action_path }}/linux/amd64/bin/grype version || true)
+
+    - name: debug
+      shell: bash
+      if: failure()
+      continue-on-error: true
+      run: |-
+        sudo apt install -y tree
+        (set -x; echo ${{ github.action_path }}; tree ${{ github.action_path }})
