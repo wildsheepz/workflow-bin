@@ -20,6 +20,7 @@ jobs:
           - { "branch": "osv-scanner" }
           - { "branch": "poutine" }
           - { "branch": "slsa-verifier" }
+          - { "branch": "trivy" }
           - { "branch": "yq" }
       fail-fast: false
     steps:
