@@ -26,11 +26,23 @@ download() {
             | tee "setup-$BIN_NAME/$BIN_NAME-$RELEASE.json"
     ) && \
     URL=$(jq -r '.url' < "setup-$BIN_NAME/$BIN_NAME-$RELEASE.json") && \
+
     curl -L https://get.helm.sh/helm-$RELEASE-linux-amd64.tar.gz -o downloads/helm-$RELEASE-linux-amd64.tar.gz && \
+
     curl -L https://get.helm.sh/helm-$RELEASE-linux-amd64.tar.gz.sha256sum -o downloads/helm-$RELEASE-linux-amd64.tar.gz.sha256sum && \
-    SIGNING_PUBKEY="$(curl -L $URL | grep -Po 'which can be found at.*$' | grep -Po 'https\S+"' | tr -d '"')" && \
-    curl -L "$SIGNING_PUBKEY" -o downloads/pgp_keys.asc && \
+
+    SIGNING_PUBKEY="$(curl -L $URL | grep -Po 'found at.*$' | grep -Po 'https\S+"' | tr ' ' '\n' | tail -n 1 | tr -d '"')"
+
+    if [[ "$SIGNING_PUBKEY" != *"/pgp_keys.asc" ]]; then
+
+        SIGNING_PUBKEY="${SIGNING_PUBKEY}/pgp_keys.asc"
+
+    fi
+
+    set -x; curl -L "$SIGNING_PUBKEY" -o downloads/pgp_keys.asc && \
+
     gh release download $RELEASE -R $REPO -p '*linux-amd64*' --dir downloads --clobber && \
+
     ln -sf $BIN_NAME-$RELEASE.json setup-$BIN_NAME/$BIN_NAME-HEAD.json
 }
 
